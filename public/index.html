@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wizard Duel Arena</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="game-container"></div>
+
+    <!-- LOBBY OVERLAY -->
+    <div id="lobby-overlay">
+        <div class="lobby-box">
+            <h1>⚡ Voice Duel Arena</h1>
+
+            <!-- Name & Character -->
+            <input type="text" id="username-input" placeholder="Enter your wizard name" value="Wizard">
+
+            <div class="character-select">
+                <label>Choose your wizard:</label>
+                <div class="character-grid" id="character-grid">
+                    <div class="character-option selected" data-character="hary">
+                        <div class="char-avatar" style="background: #740001;">H</div>
+                        <span>Hary</span>
+                    </div>
+                    <div class="character-option" data-character="hermine">
+                        <div class="char-avatar" style="background: #740001;">He</div>
+                        <span>Hermine</span>
+                    </div>
+                    <div class="character-option" data-character="roon">
+                        <div class="char-avatar" style="background: #740001;">R</div>
+                        <span>Roon</span>
+                    </div>
+                    <div class="character-option" data-character="darco">
+                        <div class="char-avatar" style="background: #1a472a;">D</div>
+                        <span>Darco</span>
+                    </div>
+                    <div class="character-option" data-character="volmort">
+                        <div class="char-avatar" style="background: #111;">V</div>
+                        <span>Volmort</span>
+                    </div>
+                    <div class="character-option" data-character="humbledore">
+                        <div class="char-avatar" style="background: #4444aa;">A</div>
+                        <span>Humbledore</span>
+                    </div>
+                    <div class="character-option" data-character="cuna">
+                        <div class="char-avatar" style="background: #0e1a40;">L</div>
+                        <span>Cuna</span>
+                    </div>
+                    <div class="character-option" data-character="dellatrix">
+                        <div class="char-avatar" style="background: #1a472a;">B</div>
+                        <span>Dellatrix</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host/Join Tabs -->
+            <div class="lobby-tabs">
+                <button class="tab-btn active" data-tab="join">Join Game</button>
+                <button class="tab-btn" data-tab="host">Host Game</button>
+            </div>
+
+            <!-- Join Panel -->
+            <div class="tab-panel active" id="join-panel">
+                <div class="room-list" id="room-list">
+                    <div class="loading">Loading rooms...</div>
+                </div>
+                <button id="refresh-btn" class="secondary-btn">🔄 Refresh</button>
+                <div class="manual-join">
+                    <input type="text" id="room-input" placeholder="Or enter room code">
+                    <button id="join-btn">Join</button>
+                </div>
+            </div>
+
+            <!-- Host Panel -->
+            <div class="tab-panel" id="host-panel">
+                <input type="text" id="room-name-input" placeholder="Room name (optional)">
+                <button id="host-btn">✨ Create Arena</button>
+            </div>
+
+            <p class="instruction">
+                <strong>Controls:</strong> WASD to Move • SPACE to Jump<br>
+                Hold LEFT CLICK + Speak spell name to Cast
+            </p>
+        </div>
+    </div>
+
+    <!-- DEATH OVERLAY -->
+    <div id="death-overlay" style="display: none;">
+        <div class="death-box">
+            <h2>💀 You Died!</h2>
+            <p>Killed by: <span id="killer-name">Unknown</span></p>
+            <div class="respawn-timer">
+                Respawning in <span id="respawn-countdown">5</span>s
+            </div>
+            <button id="respawn-btn" disabled>⚡ Respawn</button>
+        </div>
+    </div>
+
+    <!-- GAME UI -->
+    <div id="ui-overlay" style="display: none;">
+        <div id="crosshair">◎</div>
+
+        <div id="status-bar">
+            <div id="player-info">
+                <span id="player-name">Wizard</span>
+                <span id="player-stats">K: 0 / D: 0</span>
+            </div>
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            <div id="status-text">READY</div>
+        </div>
+
+        <div id="speech-feedback">
+            Hold [LEFT CLICK] + Speak to Cast<br>
+            <span id="transcription"></span>
+        </div>
+
+        <div id="spell-list"></div>
+
+        <div id="scoreboard" style="display: none;">
+            <h3>Scoreboard</h3>
+            <div id="scores"></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="client.js"></script>
+</body>
+
+</html>
