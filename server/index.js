@@ -222,32 +222,19 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // --- GAME STATE ---
 class GameRoom {
-    constructor(roomId, hostId, hostName, settings = {}) {
+    constructor(roomId, hostId, hostName) {
         this.id = roomId;
         this.hostId = hostId;
         this.hostName = hostName;
-        this.settings = {
-            timeLimit: settings.timeLimit || 300, // Default 5 mins
-            avadaLimit: settings.avadaLimit !== undefined ? settings.avadaLimit : 1,
-            ...settings
-        };
         this.players = {};
         this.projectiles = [];
         this.effects = [];
         this.projectileIdCounter = 0;
         this.effectIdCounter = 0;
         this.createdAt = Date.now();
-        this.gameEndTime = Date.now() + (this.settings.timeLimit * 1000);
-        this.isDaytime = false;
-        this.isGameOver = false;
     }
 
     addPlayer(socket, name, character) {
-        if (this.isGameOver) {
-            socket.emit('join_error', { message: 'Game has ended' });
-            return;
-        }
-
         const charData = CHARACTERS[character] || CHARACTERS['hary'];
         this.players[socket.id] = {
             id: socket.id,
@@ -280,17 +267,6 @@ class GameRoom {
 
     update() {
         const now = Date.now();
-
-        // Game Over Check
-        if (!this.isGameOver && now >= this.gameEndTime) {
-            this.isGameOver = true;
-            io.to(this.id).emit('game_over', {
-                scoreboard: Object.values(this.players).sort((a, b) => b.kills - a.kills)
-            });
-        }
-
-        if (this.isGameOver) return;
-
         const dt = 1 / TICK_RATE;
 
         // Update Projectiles
@@ -453,7 +429,6 @@ class GameRoom {
     handleInput(socketId, data) {
         const p = this.players[socketId];
         if (!p || ['STUNNED', 'FROZEN', 'DEAD', 'PETRIFIED'].includes(p.state)) return;
-        if (this.isGameOver) return;
 
         p.rot = data.rotation;
         let dx = 0, dz = 0;
@@ -481,7 +456,6 @@ class GameRoom {
     handleCast(socketId, transcript) {
         const p = this.players[socketId];
         if (!p || ['STUNNED', 'DISARMED', 'FROZEN', 'DEAD', 'SILENCED'].includes(p.state)) return;
-        if (this.isGameOver) return;
 
         const now = Date.now();
         if (p.lastCastTime && now - p.lastCastTime < SPELL_COOLDOWN) return;
@@ -494,13 +468,8 @@ class GameRoom {
 
         // ONE-TIME USE CHECK FOR AVADA KEDAVRA
         if (spell.type === 'avadakedavra') {
-            const limit = this.settings.avadaLimit;
-            if (limit === 0) {
-                io.to(socketId).emit('cast_fail', { message: "Avada Kedavra is disabled in this match!" });
-                return;
-            }
-            if (p.avadaUses >= limit) {
-                io.to(socketId).emit('cast_fail', { message: `Avada Kedavra limit reached (${limit})!` });
+            if (p.avadaUses >= 1) {
+                io.to(socketId).emit('cast_fail', { message: "Avada Kedavra is limited to once per life!" });
                 return;
             }
             p.avadaUses++;
@@ -532,16 +501,8 @@ class GameRoom {
     handleUtilitySpell(socketId, spell) {
         const p = this.players[socketId];
         switch (spell.effect) {
-            case 'light':
-                // GLOBAL LUMOS: Sets world to daytime
-                this.isDaytime = true;
-                setTimeout(() => { this.isDaytime = false; }, 10000); // Day for 10s
-                p.lumosActive = true;
-                break;
-            case 'dark':
-                this.isDaytime = false;
-                p.lumosActive = false;
-                break;
+            case 'light': p.lumosActive = true; break;
+            case 'dark': p.lumosActive = false; break;
             case 'teleport': p.x = (Math.random() - 0.5) * 40; p.z = (Math.random() - 0.5) * 40; break;
             case 'rise': p.vy = 15; p.isGrounded = false; break;
             // Healing spells
@@ -554,7 +515,7 @@ class GameRoom {
 
     handleRespawn(socketId) {
         const p = this.players[socketId];
-        if (p && p.state === 'DEAD' && !this.isGameOver) {
+        if (p && p.state === 'DEAD') {
             this.respawnPlayer(p);
         }
     }
@@ -566,8 +527,6 @@ const rooms = new Map();
 setInterval(() => {
     rooms.forEach((room) => {
         room.update();
-        const timeRemaining = Math.max(0, Math.ceil((room.gameEndTime - Date.now()) / 1000));
-
         io.to(room.id).emit('snapshot', {
             players: Object.values(room.players).map(p => ({
                 id: p.id, x: p.x, y: p.y, z: p.z, rot: p.rot,
@@ -578,10 +537,7 @@ setInterval(() => {
             })),
             projectiles: room.projectiles,
             effects: room.effects,
-            timestamp: Date.now(),
-            gameTime: timeRemaining,
-            isDaytime: room.isDaytime,
-            isGameOver: room.isGameOver
+            timestamp: Date.now()
         });
     });
 }, 1000 / TICK_RATE);
@@ -599,35 +555,28 @@ io.on('connection', (socket) => {
                 id: id,
                 host: room.hostName,
                 players: Object.keys(room.players).length,
-                maxPlayers: 8,
-                timeLeft: Math.ceil((room.gameEndTime - Date.now()) / 1000)
+                maxPlayers: 8
             });
         });
         socket.emit('room_list', roomList);
     });
 
     // Host a game
-    socket.on('host_game', ({ name, character, roomName, settings }) => {
+    socket.on('host_game', ({ name, character, roomName }) => {
         const roomId = roomName || `room_${Date.now()}`;
         if (rooms.has(roomId)) {
             socket.emit('host_error', { message: 'Room already exists' });
             return;
         }
 
-        // Defaults if not provided
-        const gameSettings = {
-            timeLimit: parseInt(settings?.timeLimit) || 300,
-            avadaLimit: settings?.avadaLimit !== undefined ? parseInt(settings.avadaLimit) : 1
-        };
-
-        const room = new GameRoom(roomId, socket.id, name, gameSettings);
+        const room = new GameRoom(roomId, socket.id, name);
         rooms.set(roomId, room);
         room.addPlayer(socket, name, character);
         currentRoomId = roomId;
 
         socket.emit('joined', { room: roomId, id: socket.id, isHost: true });
         socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
-        console.log(`${name} hosted ${roomId} with settings:`, gameSettings);
+        console.log(`${name} hosted ${roomId}`);
     });
 
     // Join a game
@@ -640,11 +589,6 @@ io.on('connection', (socket) => {
         const room = rooms.get(roomId);
         if (Object.keys(room.players).length >= 8) {
             socket.emit('join_error', { message: 'Room is full' });
-            return;
-        }
-
-        if (room.isGameOver) {
-            socket.emit('join_error', { message: 'Game has ended' });
             return;
         }
 
@@ -670,34 +614,31 @@ io.on('connection', (socket) => {
         socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
     });
 
-    socket.on('voice_cast', (data) => {
-        if (!currentRoomId || !rooms.has(currentRoomId)) return;
-        rooms.get(currentRoomId).handleCast(socket.id, data.transcript);
-    });
-
-    // Legacy cast support
-    socket.on('cast', (transcript) => {
-        if (!currentRoomId || !rooms.has(currentRoomId)) return;
-        rooms.get(currentRoomId).handleCast(socket.id, transcript);
-    });
-
-    socket.on('input', (data) => {
-        if (!currentRoomId || !rooms.has(currentRoomId)) return;
-        rooms.get(currentRoomId).handleInput(socket.id, data);
-    });
-
     socket.on('request_respawn', () => {
-        if (!currentRoomId || !rooms.has(currentRoomId)) return;
-        rooms.get(currentRoomId).handleRespawn(socket.id);
+        if (currentRoomId && rooms.has(currentRoomId)) {
+            rooms.get(currentRoomId).handleRespawn(socket.id);
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
         if (currentRoomId && rooms.has(currentRoomId)) {
-            rooms.get(currentRoomId).removePlayer(socket.id);
-            if (Object.keys(rooms.get(currentRoomId).players).length === 0) {
+            const room = rooms.get(currentRoomId);
+            room.removePlayer(socket.id);
+            if (Object.keys(room.players).length === 0) {
                 rooms.delete(currentRoomId);
             }
+        }
+    });
+
+    socket.on('input', (data) => {
+        if (currentRoomId && rooms.has(currentRoomId)) {
+            rooms.get(currentRoomId).handleInput(socket.id, data);
+        }
+    });
+
+    socket.on('voice_cast', (data) => {
+        if (currentRoomId && rooms.has(currentRoomId)) {
+            rooms.get(currentRoomId).handleCast(socket.id, data.transcript);
         }
     });
 });
