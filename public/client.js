@@ -1,4 +1,4 @@
-import { initWorld, updateWorld, updateSelf, setCameraRotation, setMyId } from './world.js';
+import { initWorld, updateWorld } from './world.js';
 
 const socket = io();
 
@@ -10,108 +10,158 @@ const state = {
     isCasting: false,
     joined: false,
     isDead: false,
-    selectedCharacter: 'hary'
+    selectedCharacter: 'hary',
+    myId: null
 };
 
 // Elements
+const canvas = document.querySelector('#game-container');
+const lobbyOverlay = document.getElementById('lobby-overlay');
+const uiOverlay = document.getElementById('ui-overlay');
+const deathOverlay = document.getElementById('death-overlay');
+const scoreboardOverlay = document.getElementById('scoreboard-overlay');
+const usernameInput = document.getElementById('username-input');
+const roomNameInput = document.getElementById('room-name-input');
+const joinBtn = document.getElementById('join-btn'); // Host button
+const roomListEl = document.getElementById('room-list');
 const healthFill = document.getElementById('health-fill');
 const statusText = document.getElementById('status-text');
-const transcriptionEl = document.getElementById('transcription');
-const lobbyOverlay = document.getElementById('lobby-overlay');
-const deathOverlay = document.getElementById('death-overlay');
-const uiOverlay = document.getElementById('ui-overlay');
-const usernameInput = document.getElementById('username-input');
-const roomInput = document.getElementById('room-input');
-const roomNameInput = document.getElementById('room-name-input');
 const playerNameEl = document.getElementById('player-name');
-const playerStatsEl = document.getElementById('player-stats');
 const killerNameEl = document.getElementById('killer-name');
 const respawnCountdownEl = document.getElementById('respawn-countdown');
 const respawnBtn = document.getElementById('respawn-btn');
-const roomListEl = document.getElementById('room-list');
+const characterGrid = document.getElementById('character-grid');
+const timeLimitInput = document.getElementById('time-limit');
+const avadaLimitInput = document.getElementById('avada-limit');
+const gameTimerEl = document.getElementById('game-timer');
+const inviteLinkBtn = document.getElementById('invite-link-btn');
+const activeRoomIdEl = document.getElementById('active-room-id');
+const transcriptionEl = document.getElementById('transcription'); // Added back for speech recognition feedback
 
-// Tab switching
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`${btn.dataset.tab}-panel`).classList.add('active');
-    });
+// Setup Audio Context for Voice
+let audioContext;
+let analyser;
+
+// Voice Recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition;
+
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+        state.isCasting = true;
+        transcriptionEl.textContent = '🎙️ Listening...';
+        transcriptionEl.style.color = '#ff6666';
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.toLowerCase();
+        console.log('Voice Command:', transcript);
+        transcriptionEl.textContent = `✨ "${transcript}"`;
+        transcriptionEl.style.color = '#ffd700';
+        if (state.joined && !state.isDead) {
+            socket.emit('cast', transcript);
+        }
+    };
+
+    recognition.onend = () => {
+        state.isCasting = false;
+        // If we want continuous listening, we'd restart here, but the new code implies push-to-talk
+        // if (state.isCasting) recognition.start();
+    };
+
+    recognition.onerror = (e) => {
+        state.isCasting = false;
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
+            transcriptionEl.textContent = '⚠️ ' + e.error;
+            transcriptionEl.style.color = '#ff6666';
+        }
+    };
+} else {
+    alert("Speech Recognition API not supported in this browser. Use Chrome.");
+}
+
+// --- LOBBY & JOINING ---
+
+// Check for invite link
+const urlParams = new URLSearchParams(window.location.search);
+const inviteRoomId = urlParams.get('room');
+if (inviteRoomId) {
+    roomNameInput.value = inviteRoomId;
+    // Auto-select "Join" tab functionality if needed, or just highlight it
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-tab="join"]').classList.add('active');
+    document.getElementById('join-panel').classList.add('active');
+}
+
+// Character Selection
+characterGrid.addEventListener('click', (e) => {
+    const option = e.target.closest('.character-option');
+    if (option) {
+        document.querySelectorAll('.character-option').forEach(el => el.classList.remove('selected'));
+        option.classList.add('selected');
+        state.selectedCharacter = option.dataset.character;
+    }
 });
 
-// Character selection
-document.querySelectorAll('.character-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-        document.querySelectorAll('.character-option').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-        state.selectedCharacter = opt.dataset.character;
-    });
-});
-
-// Refresh rooms
-document.getElementById('refresh-btn').addEventListener('click', () => {
+// Refresh Rooms
+function refreshRooms() {
     socket.emit('get_rooms');
-});
+}
+setInterval(refreshRooms, 3000);
+refreshRooms();
 
-// Host game
-document.getElementById('host-btn').addEventListener('click', () => {
-    const name = usernameInput.value || 'Wizard';
-    const roomName = roomNameInput.value || '';
-    socket.emit('host_game', {
-        name,
-        character: state.selectedCharacter,
-        roomName
-    });
-});
-
-// Join game (manual)
-document.getElementById('join-btn').addEventListener('click', () => {
-    const name = usernameInput.value || 'Wizard';
-    const roomId = roomInput.value || 'default';
-    socket.emit('join_game', {
-        name,
-        character: state.selectedCharacter,
-        roomId
-    });
-});
-
-// Room list click
-roomListEl.addEventListener('click', (e) => {
-    const roomItem = e.target.closest('.room-item');
-    if (roomItem) {
-        const name = usernameInput.value || 'Wizard';
-        socket.emit('join_game', {
-            name,
-            character: state.selectedCharacter,
-            roomId: roomItem.dataset.room
+socket.on('room_list', (rooms) => {
+    roomListEl.innerHTML = '';
+    if (rooms.length === 0) {
+        roomListEl.innerHTML = '<div class="no-rooms">No active games. Host one!</div>';
+    } else {
+        rooms.forEach(room => {
+            const li = document.createElement('div');
+            li.className = 'room-item';
+            li.innerHTML = `
+                <div>
+                    <strong>${room.id}</strong> (Host: ${room.host})<br>
+                    <small>${room.players}/${room.maxPlayers} Wizards | Time: ${Math.floor(room.timeLeft / 60)}:${(room.timeLeft % 60).toString().padStart(2, '0')}</small>
+                </div>
+                <button onclick="joinRoom('${room.id}')">Join</button>
+            `;
+            roomListEl.appendChild(li);
         });
     }
 });
 
-// Respawn button
-respawnBtn.addEventListener('click', () => {
-    socket.emit('request_respawn');
+window.joinRoom = (roomId) => {
+    const name = usernameInput.value || 'Wizard';
+    socket.emit('join_game', { name, character: state.selectedCharacter, roomId });
+};
+
+joinBtn.addEventListener('click', () => {
+    const name = usernameInput.value || 'Wizard';
+    const roomName = roomNameInput.value.trim();
+
+    // Get Settings
+    const settings = {
+        timeLimit: parseInt(timeLimitInput.value) * 60, // Convert mins to seconds
+        avadaLimit: parseInt(avadaLimitInput.value)
+    };
+
+    socket.emit('host_game', { name, character: state.selectedCharacter, roomName, settings });
 });
 
-// Socket: Room list
-socket.on('room_list', (rooms) => {
-    if (rooms.length === 0) {
-        roomListEl.innerHTML = '<div class="no-rooms">No active games. Host one!</div>';
-    } else {
-        roomListEl.innerHTML = rooms.map(r => `
-            <div class="room-item" data-room="${r.id}">
-                <div class="room-info">
-                    <div class="room-name">${r.id}</div>
-                    <div class="room-host">Host: ${r.host}</div>
-                </div>
-                <div class="room-players">${r.players}/${r.maxPlayers}</div>
-            </div>
-        `).join('');
-    }
-});
+socket.on('host_error', (data) => alert(data.message));
+socket.on('join_error', (data) => alert(data.message));
 
-// Socket: Joined
+function setMyId(id) {
+    state.myId = id;
+}
+
 socket.on('joined', (data) => {
     state.joined = true;
     state.isDead = false;
@@ -120,17 +170,43 @@ socket.on('joined', (data) => {
     deathOverlay.style.display = 'none';
     uiOverlay.style.display = 'flex';
     playerNameEl.textContent = usernameInput.value || 'Wizard';
+    activeRoomIdEl.textContent = `Room: ${data.room}`;
+
+    // Setup Invite Link
+    inviteLinkBtn.onclick = () => {
+        const url = `${window.location.origin}?room=${data.room}`;
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Invite link copied to clipboard!');
+        });
+    };
+
     document.body.requestPointerLock();
+    initWorld(canvas);
 });
 
-// Socket: Death
+socket.on('game_over', (data) => {
+    alert("GAME OVER! Check standard console for scoreboard.");
+    setTimeout(() => {
+        window.location.reload();
+    }, 5000);
+});
+
+// --- GAMEPLAY UI ---
+
+respawnBtn.addEventListener('click', () => {
+    if (!respawnBtn.disabled) {
+        socket.emit('request_respawn'); // Changed to request_respawn as per original
+        deathOverlay.style.display = 'none';
+        state.isDead = false;
+    }
+});
+
 socket.on('player_died', ({ killer, respawnIn }) => {
     state.isDead = true;
     deathOverlay.style.display = 'flex';
     killerNameEl.textContent = killer;
     respawnBtn.disabled = true;
 
-    // Countdown
     let countdown = Math.ceil(respawnIn / 1000);
     respawnCountdownEl.textContent = countdown;
 
@@ -144,62 +220,6 @@ socket.on('player_died', ({ killer, respawnIn }) => {
     }, 1000);
 });
 
-// Socket: Errors
-socket.on('host_error', ({ message }) => alert('Host error: ' + message));
-socket.on('join_error', ({ message }) => alert('Join error: ' + message));
-
-// Request rooms on connect
-socket.on('connect', () => {
-    socket.emit('get_rooms');
-});
-
-// Speech Recognition
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition;
-
-if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 5;
-
-    recognition.onstart = () => {
-        state.isCasting = true;
-        transcriptionEl.textContent = '🎙️ Listening...';
-        transcriptionEl.style.color = '#ff6666';
-    };
-
-    recognition.onend = () => state.isCasting = false;
-
-    recognition.onresult = (event) => {
-        let bestTranscript = '';
-        let confidence = 0;
-
-        for (let i = 0; i < event.results.length; i++) {
-            for (let j = 0; j < event.results[i].length; j++) {
-                if (event.results[i][j].confidence > confidence) {
-                    bestTranscript = event.results[i][j].transcript;
-                    confidence = event.results[i][j].confidence;
-                }
-            }
-        }
-
-        transcriptionEl.textContent = `✨ "${bestTranscript}"`;
-        transcriptionEl.style.color = '#ffd700';
-
-        if (event.results[event.results.length - 1].isFinal) {
-            socket.emit('voice_cast', { transcript: bestTranscript });
-        }
-    };
-
-    recognition.onerror = (e) => {
-        state.isCasting = false;
-        if (e.error !== 'no-speech' && e.error !== 'aborted') {
-            transcriptionEl.textContent = '⚠️ ' + e.error;
-        }
-    };
-}
 
 // Keyboard
 window.addEventListener('keydown', (e) => {
