@@ -10,7 +10,7 @@ const state = {
     isCasting: false,
     joined: false,
     isDead: false,
-    selectedCharacter: 'harry'
+    selectedCharacter: 'hary'
 };
 
 // Elements

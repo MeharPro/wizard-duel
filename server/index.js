@@ -644,7 +644,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`✨ Voice Duel Arena running on http://localhost:${PORT}`);
+    console.log(`✨ Wizard Duel Arena running on http://localhost:${PORT}`);
     console.log(`🧙 ${Object.keys(CHARACTERS).length} characters available`);
     console.log(`📚 ${Object.keys(SPELLS).length} spells loaded`);
 });
