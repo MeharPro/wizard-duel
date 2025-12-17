@@ -705,4 +705,12 @@ server.listen(PORT, () => {
     console.log(`✨ Wizard Duel Arena running on http://localhost:${PORT}`);
     console.log(`🧙 ${Object.keys(CHARACTERS).length} characters available`);
     console.log(`📚 ${Object.keys(SPELLS).length} spells loaded`);
+
+    // Keep-alive ping to prevent Render from spinning down
+    const RENDER_URL = 'https://wizard-duel-1.onrender.com/';
+    setInterval(() => {
+        fetch(RENDER_URL)
+            .then(() => console.log('🏓 Keep-alive ping sent'))
+            .catch(err => console.log('Keep-alive ping failed:', err.message));
+    }, 60000); // Every 1 minute
 });
