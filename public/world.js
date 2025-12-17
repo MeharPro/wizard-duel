@@ -11,6 +11,7 @@ let myShield = null;
 
 // Visual Elements
 let sunLight, skyMesh;
+let sunMesh, moonMesh;
 let particleSystem;
 
 // Materials Cache
@@ -152,6 +153,26 @@ export function initWorld(container) {
     });
     skyMesh = new THREE.Mesh(skyGeo, skyMat);
     scene.add(skyMesh);
+
+    // --- SUN MESH ---
+    const sunGeo = new THREE.SphereGeometry(15, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({
+        color: 0xffffaa,
+        fog: false
+    });
+    sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    sunMesh.position.set(200, 100, 0);
+    scene.add(sunMesh);
+
+    // --- MOON MESH ---
+    const moonGeo = new THREE.SphereGeometry(10, 32, 32);
+    const moonMat = new THREE.MeshBasicMaterial({
+        color: 0xaabbff,
+        fog: false
+    });
+    moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    moonMesh.position.set(-200, -100, 0);
+    scene.add(moonMesh);
 
     // --- GROUND ---
     createGround();
@@ -723,25 +744,92 @@ export function updateWorld() {
     const dt = Math.min(now - (lastTime * 0.001), 0.1);
     lastTime = now * 1000;
 
-    // Day/night cycle (slow)
-    const cycle = now * 0.005;
-    const sunY = Math.cos(cycle) * 50;
-    const sunX = Math.sin(cycle) * 50;
-    sunLight.position.set(sunX, Math.abs(sunY) + 10, 20);
-    sunLight.intensity = Math.max(0.3, sunY / 40);
+    // Day/night cycle (VERY SLOW: ~10 min full cycle)
+    const cycleSpeed = 0.0008; // Very slow rotation
+    const cycle = now * cycleSpeed;
+    const sunAngle = cycle * Math.PI * 2;
 
-    // Sky update
+    // Sun orbits the scene
+    const orbitRadius = 200;
+    const sunX = Math.sin(sunAngle) * orbitRadius;
+    const sunY = Math.cos(sunAngle) * orbitRadius;
+    const sunZ = Math.sin(sunAngle * 0.5) * 50;
+
+    if (sunMesh) {
+        sunMesh.position.set(sunX, sunY, sunZ);
+    }
+
+    // Moon is opposite the sun
+    if (moonMesh) {
+        moonMesh.position.set(-sunX, -sunY, -sunZ);
+    }
+
+    // DirectionalLight follows sun
+    sunLight.position.set(sunX * 0.3, Math.max(sunY * 0.3, 10), sunZ * 0.3);
+
+    // Calculate time of day (0 = midnight, 0.5 = noon)
+    const timeOfDay = (Math.cos(sunAngle) + 1) / 2; // 0 to 1
+
+    // Light intensity based on sun position
+    sunLight.intensity = Math.max(0.2, timeOfDay * 1.8);
+
+    // Sky color blending
     if (skyMesh) {
         skyMesh.material.uniforms.time.value = now;
-        const isNight = sunY < 0;
-        if (isNight) {
-            skyMesh.material.uniforms.topColor.value.setHex(0x000011);
-            skyMesh.material.uniforms.bottomColor.value.setHex(0x0a0a2a);
+
+        // Night colors
+        const nightTop = new THREE.Color(0x000011);
+        const nightBottom = new THREE.Color(0x0a0a2a);
+
+        // Day colors
+        const dayTop = new THREE.Color(0x4488cc);
+        const dayBottom = new THREE.Color(0x88bbee);
+
+        // Sunrise/sunset colors
+        const sunsetTop = new THREE.Color(0xff6644);
+        const sunsetBottom = new THREE.Color(0xffaa33);
+
+        // Calculate blend
+        let topColor, bottomColor;
+
+        if (timeOfDay < 0.2) {
+            // Night to dawn
+            const t = timeOfDay / 0.2;
+            topColor = nightTop.clone().lerp(sunsetTop, t);
+            bottomColor = nightBottom.clone().lerp(sunsetBottom, t);
+        } else if (timeOfDay < 0.35) {
+            // Dawn to day
+            const t = (timeOfDay - 0.2) / 0.15;
+            topColor = sunsetTop.clone().lerp(dayTop, t);
+            bottomColor = sunsetBottom.clone().lerp(dayBottom, t);
+        } else if (timeOfDay < 0.65) {
+            // Full day
+            topColor = dayTop;
+            bottomColor = dayBottom;
+        } else if (timeOfDay < 0.8) {
+            // Day to dusk
+            const t = (timeOfDay - 0.65) / 0.15;
+            topColor = dayTop.clone().lerp(sunsetTop, t);
+            bottomColor = dayBottom.clone().lerp(sunsetBottom, t);
         } else {
-            skyMesh.material.uniforms.topColor.value.setHex(0x1a3a6a);
-            skyMesh.material.uniforms.bottomColor.value.setHex(0x4466aa);
+            // Dusk to night
+            const t = (timeOfDay - 0.8) / 0.2;
+            topColor = sunsetTop.clone().lerp(nightTop, t);
+            bottomColor = sunsetBottom.clone().lerp(nightBottom, t);
         }
+
+        skyMesh.material.uniforms.topColor.value.copy(topColor);
+        skyMesh.material.uniforms.bottomColor.value.copy(bottomColor);
     }
+
+    // Scene fog and background follow time
+    const fogColor = new THREE.Color().lerpColors(
+        new THREE.Color(0x0a0a1a),
+        new THREE.Color(0x88bbee),
+        timeOfDay
+    );
+    scene.fog.color.copy(fogColor);
+    scene.background.copy(fogColor);
 
     // Particles
     particleSystem.update(dt);

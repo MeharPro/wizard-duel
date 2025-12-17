@@ -222,7 +222,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // --- GAME STATE ---
 class GameRoom {
-    constructor(roomId, hostId, hostName) {
+    constructor(roomId, hostId, hostName, gameMode = 'endless', killTarget = 0, timeLimit = 0) {
         this.id = roomId;
         this.hostId = hostId;
         this.hostName = hostName;
@@ -232,6 +232,14 @@ class GameRoom {
         this.projectileIdCounter = 0;
         this.effectIdCounter = 0;
         this.createdAt = Date.now();
+
+        // Game mode settings
+        this.gameMode = gameMode;
+        this.killTarget = killTarget;
+        this.timeLimit = timeLimit; // in seconds
+        this.startTime = Date.now();
+        this.gameEnded = false;
+        this.winner = null;
     }
 
     addPlayer(socket, name, character) {
@@ -268,6 +276,11 @@ class GameRoom {
     update() {
         const now = Date.now();
         const dt = 1 / TICK_RATE;
+
+        // Check win conditions
+        if (!this.gameEnded) {
+            this.checkWinConditions(now);
+        }
 
         // Update Projectiles
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -355,6 +368,44 @@ class GameRoom {
         player.isGrounded = true;
         player.activeSpell = null;
         player.avadaUses = 0; // Reset AK usage on respawn
+    }
+
+    checkWinConditions(now) {
+        const players = Object.values(this.players);
+        if (players.length === 0) return;
+
+        // Kill-based win
+        if (this.gameMode === 'kills' && this.killTarget > 0) {
+            for (const p of players) {
+                if (p.kills >= this.killTarget) {
+                    this.endGame(p);
+                    return;
+                }
+            }
+        }
+
+        // Time-based win
+        if (this.gameMode === 'time' && this.timeLimit > 0) {
+            const elapsed = (now - this.startTime) / 1000;
+            if (elapsed >= this.timeLimit) {
+                // Find player with most kills
+                const sorted = players.sort((a, b) => b.kills - a.kills);
+                this.endGame(sorted[0]);
+                return;
+            }
+        }
+    }
+
+    endGame(winner) {
+        this.gameEnded = true;
+        this.winner = winner ? winner.name : 'Nobody';
+        io.to(this.id).emit('game_over', {
+            winner: this.winner,
+            winnerId: winner?.id,
+            gameMode: this.gameMode,
+            killTarget: this.killTarget,
+            timeLimit: this.timeLimit
+        });
     }
 
     applySpellEffect(target, spellType, casterId) {
@@ -562,21 +613,28 @@ io.on('connection', (socket) => {
     });
 
     // Host a game
-    socket.on('host_game', ({ name, character, roomName }) => {
+    socket.on('host_game', ({ name, character, roomName, gameMode, killTarget, timeLimit }) => {
         const roomId = roomName || `room_${Date.now()}`;
         if (rooms.has(roomId)) {
             socket.emit('host_error', { message: 'Room already exists' });
             return;
         }
 
-        const room = new GameRoom(roomId, socket.id, name);
+        const room = new GameRoom(roomId, socket.id, name, gameMode || 'endless', killTarget || 0, timeLimit || 0);
         rooms.set(roomId, room);
         room.addPlayer(socket, name, character);
         currentRoomId = roomId;
 
-        socket.emit('joined', { room: roomId, id: socket.id, isHost: true });
+        socket.emit('joined', {
+            room: roomId,
+            id: socket.id,
+            isHost: true,
+            gameMode: room.gameMode,
+            killTarget: room.killTarget,
+            timeLimit: room.timeLimit
+        });
         socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
-        console.log(`${name} hosted ${roomId}`);
+        console.log(`${name} hosted ${roomId} [${gameMode}, kills:${killTarget}, time:${timeLimit}s]`);
     });
 
     // Join a game

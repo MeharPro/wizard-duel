@@ -3,7 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Wizard Duel Arena</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -90,6 +92,39 @@
             <!-- Host Panel -->
             <div class="tab-panel" id="host-panel">
                 <input type="text" id="room-name-input" placeholder="Room name (optional)">
+
+                <!-- Game Mode Options -->
+                <div class="game-mode-section">
+                    <label>Win Condition:</label>
+                    <select id="win-mode">
+                        <option value="endless">Endless (No Win)</option>
+                        <option value="kills">First to X Kills</option>
+                        <option value="time">Timed Match</option>
+                    </select>
+
+                    <div id="kill-options" class="mode-options" style="display:none;">
+                        <select id="kill-target">
+                            <option value="10">10 Kills</option>
+                            <option value="15">15 Kills</option>
+                            <option value="30">30 Kills</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input type="number" id="kill-custom" class="custom-input" placeholder="Kills" min="1"
+                            style="display:none;">
+                    </div>
+
+                    <div id="time-options" class="mode-options" style="display:none;">
+                        <select id="time-limit">
+                            <option value="120">2 Minutes</option>
+                            <option value="240">4 Minutes</option>
+                            <option value="420">7 Minutes</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input type="number" id="time-custom" class="custom-input" placeholder="Seconds" min="30"
+                            style="display:none;">
+                    </div>
+                </div>
+
                 <button id="host-btn">✨ Create Arena</button>
             </div>
 
@@ -138,6 +173,18 @@
             <h3>Scoreboard</h3>
             <div id="scores"></div>
         </div>
+    </div>
+
+    <!-- MOBILE CONTROLS -->
+    <div id="mobile-controls" style="display: none;">
+        <div id="joystick-zone">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="mobile-actions">
+            <button id="mobile-jump-btn">⏫</button>
+            <button id="mobile-cast-btn">🎙️ CAST</button>
+        </div>
+        <div id="mobile-b-layer"></div> <!-- Touch area for camera -->
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

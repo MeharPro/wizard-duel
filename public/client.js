@@ -54,14 +54,55 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
     socket.emit('get_rooms');
 });
 
+// Game mode option toggles
+const winModeSelect = document.getElementById('win-mode');
+const killOptions = document.getElementById('kill-options');
+const timeOptions = document.getElementById('time-options');
+const killTargetSelect = document.getElementById('kill-target');
+const killCustomInput = document.getElementById('kill-custom');
+const timeLimitSelect = document.getElementById('time-limit');
+const timeCustomInput = document.getElementById('time-custom');
+
+winModeSelect.addEventListener('change', () => {
+    killOptions.style.display = winModeSelect.value === 'kills' ? 'block' : 'none';
+    timeOptions.style.display = winModeSelect.value === 'time' ? 'block' : 'none';
+});
+
+killTargetSelect.addEventListener('change', () => {
+    killCustomInput.style.display = killTargetSelect.value === 'custom' ? 'block' : 'none';
+});
+
+timeLimitSelect.addEventListener('change', () => {
+    timeCustomInput.style.display = timeLimitSelect.value === 'custom' ? 'block' : 'none';
+});
+
 // Host game
 document.getElementById('host-btn').addEventListener('click', () => {
     const name = usernameInput.value || 'Wizard';
     const roomName = roomNameInput.value || '';
+
+    // Get game mode settings
+    const gameMode = winModeSelect.value;
+    let killTarget = 0;
+    let timeLimit = 0;
+
+    if (gameMode === 'kills') {
+        killTarget = killTargetSelect.value === 'custom'
+            ? parseInt(killCustomInput.value) || 10
+            : parseInt(killTargetSelect.value);
+    } else if (gameMode === 'time') {
+        timeLimit = timeLimitSelect.value === 'custom'
+            ? parseInt(timeCustomInput.value) || 120
+            : parseInt(timeLimitSelect.value);
+    }
+
     socket.emit('host_game', {
         name,
         character: state.selectedCharacter,
-        roomName
+        roomName,
+        gameMode,
+        killTarget,
+        timeLimit
     });
 });
 
@@ -147,6 +188,36 @@ socket.on('player_died', ({ killer, respawnIn }) => {
 // Socket: Errors
 socket.on('host_error', ({ message }) => alert('Host error: ' + message));
 socket.on('join_error', ({ message }) => alert('Join error: ' + message));
+
+// Game Over
+socket.on('game_over', ({ winner, winnerId, gameMode, killTarget, timeLimit }) => {
+    // Show game over overlay
+    const isWinner = winnerId === socket.id;
+    const msg = isWinner ? '🏆 Victory!' : `${winner} Wins!`;
+
+    // Create overlay if not exists
+    let gameOverOverlay = document.getElementById('game-over-overlay');
+    if (!gameOverOverlay) {
+        gameOverOverlay = document.createElement('div');
+        gameOverOverlay.id = 'game-over-overlay';
+        gameOverOverlay.innerHTML = `
+            <div class="game-over-box">
+                <h2 id="game-over-title">Game Over</h2>
+                <p id="game-over-message"></p>
+                <button id="return-lobby-btn">Return to Lobby</button>
+            </div>
+        `;
+        document.body.appendChild(gameOverOverlay);
+
+        document.getElementById('return-lobby-btn').addEventListener('click', () => {
+            location.reload();
+        });
+    }
+
+    document.getElementById('game-over-title').textContent = isWinner ? '🏆 Victory!' : '💀 Defeat';
+    document.getElementById('game-over-message').textContent = `${winner} wins the match!`;
+    gameOverOverlay.style.display = 'flex';
+});
 
 // Request rooms on connect
 socket.on('connect', () => {
@@ -256,6 +327,139 @@ document.addEventListener('click', () => {
 });
 
 document.addEventListener('contextmenu', e => e.preventDefault());
+
+// ==================== MOBILE CONTROLS ====================
+function isTouchDevice() {
+    return (('ontouchstart' in window) ||
+        (navigator.maxTouchPoints > 0) ||
+        (navigator.msMaxTouchPoints > 0));
+}
+
+if (isTouchDevice()) {
+    document.getElementById('mobile-controls').style.display = 'block';
+
+    // Disable pointer lock requirement on mobile
+    document.addEventListener('click', () => { /* No-op */ });
+}
+
+// Joystick
+const joystickZone = document.getElementById('joystick-zone');
+const joystickKnob = document.getElementById('joystick-knob');
+let joystickCenter = { x: 0, y: 0 };
+let joystickTouchId = null;
+
+joystickZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    joystickTouchId = touch.identifier;
+    const rect = joystickZone.getBoundingClientRect();
+    joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+});
+
+joystickZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystickTouchId) {
+            let dx = touch.clientX - joystickCenter.x;
+            let dy = touch.clientY - joystickCenter.y;
+            const dist = Math.hypot(dx, dy);
+            const maxDist = 35; // Limit knob movement
+
+            if (dist > maxDist) {
+                dx = (dx / dist) * maxDist;
+                dy = (dy / dist) * maxDist;
+            }
+
+            joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            // WASD Simulation
+            const threadhold = 10;
+            keys.w = dy < -threadhold;
+            keys.s = dy > threadhold;
+            keys.a = dx < -threadhold;
+            keys.d = dx > threadhold;
+        }
+    }
+});
+
+joystickZone.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+            joystickTouchId = null;
+            joystickKnob.style.transform = `translate(-50%, -50%)`;
+            keys.w = keys.s = keys.a = keys.d = false;
+        }
+    }
+});
+
+// Camera Touch Layer (Right side)
+const touchLayer = document.getElementById('mobile-b-layer');
+let cameraTouchId = null;
+let lastTouchX = 0;
+let lastTouchY = 0;
+
+touchLayer.addEventListener('touchstart', (e) => {
+    const touch = e.changedTouches[0];
+    cameraTouchId = touch.identifier;
+    lastTouchX = touch.clientX;
+    lastTouchY = touch.clientY;
+});
+
+touchLayer.addEventListener('touchmove', (e) => {
+    e.preventDefault(); // Prevent scrolling
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === cameraTouchId) {
+            const dx = touch.clientX - lastTouchX;
+            const dy = touch.clientY - lastTouchY;
+
+            const sensitivity = 0.005;
+            state.rotation -= dx * sensitivity;
+            state.pitch -= dy * sensitivity;
+            state.pitch = Math.max(-1.4, Math.min(1.4, state.pitch));
+            setCameraRotation(state.rotation, state.pitch);
+
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+        }
+    }
+});
+
+touchLayer.addEventListener('touchend', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === cameraTouchId) {
+            cameraTouchId = null;
+        }
+    }
+});
+
+// Mobile Action Buttons
+const jumpBtn = document.getElementById('mobile-jump-btn');
+const castBtn = document.getElementById('mobile-cast-btn');
+
+jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.space = true; jumpBtn.style.transform = 'scale(0.9)'; });
+jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.space = false; jumpBtn.style.transform = 'scale(1)'; });
+
+// Cast Button (Hold to Speak)
+castBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!state.isCasting && recognition) {
+        try { recognition.start(); } catch (err) { }
+        castBtn.style.background = 'rgba(255, 0, 0, 0.5)';
+        castBtn.textContent = '👂';
+    }
+});
+
+castBtn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    if (recognition) {
+        try { recognition.stop(); } catch (err) { }
+        castBtn.style.background = 'rgba(102, 126, 234, 0.3)';
+        castBtn.textContent = '🎙️ CAST';
+    }
+});
 
 // Init
 initWorld(document.getElementById('game-container'));
