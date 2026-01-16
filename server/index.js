@@ -914,6 +914,19 @@ io.on('connection', (socket) => {
         // Start AI decision loop for this battle
         startAIBattleLoop(roomId, socket);
     });
+
+    // Leave/cleanup AI battle (for rematch)
+    socket.on('leave_ai_battle', () => {
+        if (currentRoomId && rooms.has(currentRoomId)) {
+            const room = rooms.get(currentRoomId);
+            if (room.isAiBattle) {
+                // Remove the room entirely - loops will clean themselves up
+                rooms.delete(currentRoomId);
+                console.log(`Cleaned up AI battle room: ${currentRoomId}`);
+            }
+        }
+        currentRoomId = null;
+    });
 });
 
 // List saved custom games endpoint

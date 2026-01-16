@@ -280,6 +280,8 @@ socket.on('ai_battle_result', ({ winner, aiName }) => {
 
         document.getElementById('ai-rematch-btn').addEventListener('click', () => {
             resultOverlay.style.display = 'none';
+            // Clean up old battle before starting new one
+            socket.emit('leave_ai_battle');
             const difficulty = aiDifficultySelect?.value || 'normal';
             socket.emit('start_ai_battle', {
                 name: usernameInput.value || 'Wizard',
