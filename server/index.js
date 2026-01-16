@@ -1085,10 +1085,10 @@ function startAIBattleLoop(roomId, playerSocket) {
                             id: room.projectileIdCounter++,
                             ownerId: ai.id,
                             type: spell.type,
-                            x: ai.x - (aimX / aimDist) * 1.5,
-                            z: ai.z - (aimZ / aimDist) * 1.5,
-                            vx: -(aimX / aimDist) * spell.speed,
-                            vz: -(aimZ / aimDist) * spell.speed,
+                            x: ai.x + (aimX / aimDist) * 1.5,
+                            z: ai.z + (aimZ / aimDist) * 1.5,
+                            vx: (aimX / aimDist) * spell.speed,
+                            vz: (aimZ / aimDist) * spell.speed,
                             lifetime: 5.0
                         });
                     }
