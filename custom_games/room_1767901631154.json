@@ -1,0 +1,603 @@
+{
+  "meta": {
+    "name": "Roast Arena",
+    "description": "Words hurt more than sticks",
+    "theme": "trashtalk",
+    "createdAt": "2026-01-08T19:47:05.665Z",
+    "createdBy": null,
+    "originalPrompt": "trash talk battle where insults are weapons"
+  },
+  "characters": {
+    "hary": {
+      "name": "The Insulter",
+      "color": 16777215,
+      "robeColor": 16711680,
+      "house": "Trash Talkers Union"
+    },
+    "hermine": {
+      "name": "Hermine Granger",
+      "color": 16737792,
+      "robeColor": 7602177,
+      "house": "gryffindor"
+    },
+    "roon": {
+      "name": "Roon Weasley",
+      "color": 16750848,
+      "robeColor": 7602177,
+      "house": "gryffindor"
+    },
+    "darco": {
+      "name": "The Heckler",
+      "color": 255,
+      "robeColor": 16776960,
+      "house": "Audience of One"
+    },
+    "volmort": {
+      "name": "Lord Volemort",
+      "color": 0,
+      "robeColor": 1118481,
+      "house": "slytherin"
+    },
+    "snape": {
+      "name": "Severus Snape",
+      "color": 3355443,
+      "robeColor": 0,
+      "house": "slytherin"
+    },
+    "humbledore": {
+      "name": "Albus Humbledore",
+      "color": 10066431,
+      "robeColor": 4474026,
+      "house": "gryffindor"
+    },
+    "cuna": {
+      "name": "Cuna Lovegood",
+      "color": 39423,
+      "robeColor": 924224,
+      "house": "ravenclaw"
+    },
+    "cedric": {
+      "name": "Cedric Diggory",
+      "color": 16763904,
+      "robeColor": 15513913,
+      "house": "hufflepuff"
+    },
+    "dellatrix": {
+      "name": "Dellatrix Lestrange",
+      "color": 10027161,
+      "robeColor": 1722154,
+      "house": "slytherin"
+    }
+  },
+  "spells": {
+    "expelliarmus": {
+      "voiceCommands": [
+        "you suck",
+        "loser",
+        "noob",
+        "get lost"
+      ],
+      "displayName": "Sick Burn",
+      "color": 16744448,
+      "projectileType": "bolt",
+      "trailParticles": true
+    },
+    "stupefy": {
+      "voiceCommands": [
+        "shut up",
+        "be quiet",
+        "stfu"
+      ],
+      "displayName": "Silence!",
+      "color": 16776960,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "incendio": {
+      "voiceCommands": [
+        "incendio",
+        "fire",
+        "burn"
+      ],
+      "displayName": "Incendio",
+      "color": 16737792,
+      "projectileType": "fire",
+      "trailParticles": true
+    },
+    "confringo": {
+      "voiceCommands": [
+        "confringo",
+        "explode"
+      ],
+      "displayName": "Confringo",
+      "color": 16724736,
+      "projectileType": "orb",
+      "trailParticles": true
+    },
+    "bombarda": {
+      "voiceCommands": [
+        "bombarda",
+        "bomb",
+        "boom"
+      ],
+      "displayName": "Bombarda",
+      "color": 13369344,
+      "projectileType": "orb",
+      "trailParticles": true
+    },
+    "reducto": {
+      "voiceCommands": [
+        "reducto",
+        "reduce"
+      ],
+      "displayName": "Reducto",
+      "color": 16711935,
+      "projectileType": "orb",
+      "trailParticles": true
+    },
+    "sectumsempra": {
+      "voiceCommands": [
+        "sectumsempra",
+        "sectum",
+        "cut"
+      ],
+      "displayName": "Sectumsempra",
+      "color": 10027008,
+      "projectileType": "slash",
+      "trailParticles": true
+    },
+    "flipendo": {
+      "voiceCommands": [
+        "flipendo",
+        "flip",
+        "push"
+      ],
+      "displayName": "Flipendo",
+      "color": 65535,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "depulso": {
+      "voiceCommands": [
+        "depulso",
+        "push away"
+      ],
+      "displayName": "Depulso",
+      "color": 52428,
+      "projectileType": "wave",
+      "trailParticles": false
+    },
+    "diffindo": {
+      "voiceCommands": [
+        "diffindo",
+        "cut"
+      ],
+      "displayName": "Diffindo",
+      "color": 13395558,
+      "projectileType": "slash",
+      "trailParticles": false
+    },
+    "petrificus": {
+      "voiceCommands": [
+        "petrificus",
+        "petrify",
+        "freeze"
+      ],
+      "displayName": "Petrificus Totalus",
+      "color": 8947848,
+      "projectileType": "beam",
+      "trailParticles": true
+    },
+    "glacius": {
+      "voiceCommands": [
+        "glacius",
+        "ice",
+        "freeze"
+      ],
+      "displayName": "Glacius",
+      "color": 6737151,
+      "projectileType": "crystal",
+      "trailParticles": true
+    },
+    "aguamenti": {
+      "voiceCommands": [
+        "aguamenti",
+        "water"
+      ],
+      "displayName": "Aguamenti",
+      "color": 39423,
+      "projectileType": "stream",
+      "trailParticles": true
+    },
+    "ventus": {
+      "voiceCommands": [
+        "ventus",
+        "wind"
+      ],
+      "displayName": "Ventus",
+      "color": 13421772,
+      "projectileType": "wave",
+      "trailParticles": false
+    },
+    "levicorpus": {
+      "voiceCommands": [
+        "levicorpus",
+        "levitate"
+      ],
+      "displayName": "Levicorpus",
+      "color": 13395711,
+      "projectileType": "beam",
+      "trailParticles": true
+    },
+    "impedimenta": {
+      "voiceCommands": [
+        "impedimenta",
+        "slow"
+      ],
+      "displayName": "Impedimenta",
+      "color": 10066380,
+      "projectileType": "wave",
+      "trailParticles": false
+    },
+    "incarcerous": {
+      "voiceCommands": [
+        "incarcerous",
+        "bind",
+        "chain"
+      ],
+      "displayName": "Incarcerous",
+      "color": 10053171,
+      "projectileType": "beam",
+      "trailParticles": false
+    },
+    "oppugno": {
+      "voiceCommands": [
+        "oppugno",
+        "attack"
+      ],
+      "displayName": "Oppugno",
+      "color": 16763904,
+      "projectileType": "swarm",
+      "trailParticles": true
+    },
+    "rictusempra": {
+      "voiceCommands": [
+        "rictusempra",
+        "tickle"
+      ],
+      "displayName": "Rictusempra",
+      "color": 16777113,
+      "projectileType": "wave",
+      "trailParticles": false
+    },
+    "tarantallegra": {
+      "voiceCommands": [
+        "tarantallegra",
+        "dance"
+      ],
+      "displayName": "Tarantallegra",
+      "color": 16751103,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "serpensortia": {
+      "voiceCommands": [
+        "serpensortia",
+        "snake"
+      ],
+      "displayName": "Serpensortia",
+      "color": 65280,
+      "projectileType": "creature",
+      "trailParticles": false
+    },
+    "locomotormortis": {
+      "voiceCommands": [
+        "locomotormortis",
+        "leg lock"
+      ],
+      "displayName": "Locomotor Mortis",
+      "color": 6710937,
+      "projectileType": "beam",
+      "trailParticles": false
+    },
+    "confundus": {
+      "voiceCommands": [
+        "confundus",
+        "confuse"
+      ],
+      "displayName": "Confundus",
+      "color": 16751052,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "obliviate": {
+      "voiceCommands": [
+        "obliviate",
+        "forget"
+      ],
+      "displayName": "Obliviate",
+      "color": 13408767,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "fiendfyre": {
+      "voiceCommands": [
+        "fiendfyre",
+        "hellfire"
+      ],
+      "displayName": "Fiendfyre",
+      "color": 16711680,
+      "projectileType": "fire",
+      "trailParticles": true
+    },
+    "protego": {
+      "voiceCommands": [
+        "protego",
+        "protect",
+        "shield"
+      ],
+      "displayName": "Protego",
+      "color": 26367,
+      "projectileType": "shield",
+      "trailParticles": false
+    },
+    "salvio": {
+      "voiceCommands": [
+        "salvio",
+        "save"
+      ],
+      "displayName": "Salvio Hexia",
+      "color": 6711039,
+      "projectileType": "shield",
+      "trailParticles": false
+    },
+    "episkey": {
+      "voiceCommands": [
+        "episkey",
+        "heal",
+        "fix"
+      ],
+      "displayName": "Episkey",
+      "color": 65433,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "vulnera": {
+      "voiceCommands": [
+        "vulnera",
+        "heal wounds"
+      ],
+      "displayName": "Vulnera Sanentur",
+      "color": 65484,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "lumos": {
+      "voiceCommands": [
+        "lumos",
+        "light"
+      ],
+      "displayName": "Lumos",
+      "color": 16777164,
+      "projectileType": "glow",
+      "trailParticles": false
+    },
+    "nox": {
+      "voiceCommands": [
+        "nox",
+        "dark",
+        "off"
+      ],
+      "displayName": "Nox",
+      "color": 3355443,
+      "projectileType": "glow",
+      "trailParticles": false
+    },
+    "accio": {
+      "voiceCommands": [
+        "accio",
+        "come",
+        "summon"
+      ],
+      "displayName": "Accio",
+      "color": 65280,
+      "projectileType": "spiral",
+      "trailParticles": true
+    },
+    "alohomora": {
+      "voiceCommands": [
+        "alohomora",
+        "unlock",
+        "open"
+      ],
+      "displayName": "Alohomora",
+      "color": 16763904,
+      "projectileType": "glow",
+      "trailParticles": false
+    },
+    "reparo": {
+      "voiceCommands": [
+        "reparo",
+        "repair",
+        "fix"
+      ],
+      "displayName": "Reparo",
+      "color": 10079487,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "apparate": {
+      "voiceCommands": [
+        "apparate",
+        "teleport",
+        "blink"
+      ],
+      "displayName": "Apparate",
+      "color": 10053375,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "ascendio": {
+      "voiceCommands": [
+        "ascendio",
+        "rise",
+        "up"
+      ],
+      "displayName": "Ascendio",
+      "color": 10092543,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "wingardium": {
+      "voiceCommands": [
+        "wingardium",
+        "levitate",
+        "float"
+      ],
+      "displayName": "Wingardium Leviosa",
+      "color": 16777113,
+      "projectileType": "beam",
+      "trailParticles": true
+    },
+    "expectopatronum": {
+      "voiceCommands": [
+        "expecto patronum",
+        "patronus",
+        "patronum"
+      ],
+      "displayName": "Expecto Patronum",
+      "color": 16777215,
+      "projectileType": "creature",
+      "trailParticles": true
+    },
+    "riddikulus": {
+      "voiceCommands": [
+        "riddikulus",
+        "ridiculous"
+      ],
+      "displayName": "Riddikulus",
+      "color": 16751103,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "avadakedavra": {
+      "voiceCommands": [
+        "avada kedavra",
+        "avada",
+        "kill"
+      ],
+      "displayName": "Avada Kedavra",
+      "color": 65280,
+      "projectileType": "beam",
+      "trailParticles": true
+    },
+    "crucio": {
+      "voiceCommands": [
+        "crucio",
+        "torture"
+      ],
+      "displayName": "Crucio",
+      "color": 16711782,
+      "projectileType": "bolt",
+      "trailParticles": true
+    },
+    "imperio": {
+      "voiceCommands": [
+        "imperio",
+        "control"
+      ],
+      "displayName": "Imperio",
+      "color": 10027263,
+      "projectileType": "wave",
+      "trailParticles": true
+    },
+    "morsmorde": {
+      "voiceCommands": [
+        "morsmorde",
+        "dark mark"
+      ],
+      "displayName": "Morsmordre",
+      "color": 65280,
+      "projectileType": "glow",
+      "trailParticles": true
+    },
+    "avada kedavra": {
+      "voiceCommands": [
+        "your mom",
+        "cry about it",
+        "get rekt",
+        "owned"
+      ],
+      "displayName": "Ultimate Roast",
+      "color": 16711680,
+      "projectileType": "beam"
+    },
+    "petrificus totalus": {
+      "voiceCommands": [
+        "you're frozen",
+        "can't move",
+        "stuck"
+      ],
+      "displayName": "Verbal Paralysis",
+      "color": 10066329,
+      "projectileType": "orb"
+    },
+    "expecto patronum": {
+      "voiceCommands": [
+        "i'm better than you",
+        "you can't beat me",
+        "i win"
+      ],
+      "displayName": "Confidence Blast",
+      "color": 16776960,
+      "projectileType": "glow"
+    }
+  },
+  "environment": {
+    "sky": {
+      "dayTopColor": 16711680,
+      "dayBottomColor": 16744448,
+      "nightTopColor": 255,
+      "nightBottomColor": 10066329,
+      "sunsetTopColor": 16737860,
+      "sunsetBottomColor": 16755251,
+      "starsEnabled": false
+    },
+    "ground": {
+      "floorColor": 2236962,
+      "ringColor": 3811866,
+      "magicCircleColor": 16711680
+    },
+    "fog": {
+      "color": 16711680,
+      "density": 0.05
+    },
+    "lighting": {
+      "ambientColor": 4210816,
+      "ambientIntensity": 0.4,
+      "sunColor": 16777164,
+      "sunIntensity": 1.5,
+      "ambient": 16711680,
+      "sun": 16744448
+    },
+    "decorations": {
+      "treesEnabled": true,
+      "treeCount": 40,
+      "grassEnabled": true,
+      "grassCount": 3000,
+      "pillarsEnabled": true,
+      "pillarCount": 8,
+      "flameColor": 16737792,
+      "enabled": true,
+      "type": "crumpled paper"
+    }
+  },
+  "ui": {
+    "title": "Roast Arena",
+    "subtitle": "Where insults reign supreme",
+    "deathMessage": "You got roasted by",
+    "respawnText": "Get back in there and insult them!",
+    "victoryText": "You're the Roast Master!",
+    "defeatText": "You couldn't handle the heat!"
+  }
+}

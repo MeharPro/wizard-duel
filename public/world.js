@@ -14,6 +14,10 @@ let sunLight, skyMesh;
 let sunMesh, moonMesh;
 let particleSystem;
 
+// Dynamic environment meshes (for config updates)
+let floorMesh, ringMesh, magicCircleMesh;
+let ambientLight;
+
 // Materials Cache
 const spellMaterials = {};
 const spellGeometries = {};
@@ -119,8 +123,8 @@ export function initWorld(container) {
     container.appendChild(renderer.domElement);
 
     // --- LIGHTING ---
-    const ambient = new THREE.AmbientLight(0x404080, 0.4);
-    scene.add(ambient);
+    ambientLight = new THREE.AmbientLight(0x404080, 0.4);
+    scene.add(ambientLight);
 
     const hemi = new THREE.HemisphereLight(0x6688cc, 0x223344, 0.6);
     hemi.position.set(0, 50, 0);
@@ -199,10 +203,10 @@ function createGround() {
         roughness: 0.9,
         metalness: 0.1
     });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
+    floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.receiveShadow = true;
+    scene.add(floorMesh);
 
     // Arena ring
     const ringGeo = new THREE.RingGeometry(48, 52, 64);
@@ -210,10 +214,10 @@ function createGround() {
         color: 0x3a2a1a,
         roughness: 0.6
     });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    scene.add(ring);
+    ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.position.y = 0.02;
+    scene.add(ringMesh);
 
     // Magic circle in center
     const circleGeo = new THREE.RingGeometry(8, 10, 32);
@@ -223,10 +227,10 @@ function createGround() {
         opacity: 0.3,
         side: THREE.DoubleSide
     });
-    const circle = new THREE.Mesh(circleGeo, circleMat);
-    circle.rotation.x = -Math.PI / 2;
-    circle.position.y = 0.03;
-    scene.add(circle);
+    magicCircleMesh = new THREE.Mesh(circleGeo, circleMat);
+    magicCircleMesh.rotation.x = -Math.PI / 2;
+    magicCircleMesh.position.y = 0.03;
+    scene.add(magicCircleMesh);
 }
 
 function createVegetation() {
@@ -835,4 +839,173 @@ export function updateWorld() {
     particleSystem.update(dt);
 
     renderer.render(scene, camera);
+}
+
+// Store current game config for reference
+let currentGameConfig = null;
+
+/**
+ * Apply a game configuration to update visuals
+ * This modifies sky colors, ground, spell visuals, etc. based on the config
+ */
+export function applyGameConfig(config) {
+    if (!config) return;
+
+    currentGameConfig = config;
+    console.log('🎨 Applying game config visuals:', config.meta?.name || 'Custom');
+    console.log('🎨 Environment config:', config.environment);
+
+    // Update spell materials based on config
+    if (config.spells) {
+        for (const [spellName, spellData] of Object.entries(config.spells)) {
+            if (spellMaterials[spellName] && spellData.color !== undefined) {
+                const color = typeof spellData.color === 'number' ? spellData.color : parseInt(spellData.color);
+                spellMaterials[spellName].color.setHex(color);
+                console.log(`🔮 Updated spell ${spellName} color to ${color.toString(16)}`);
+            }
+        }
+    }
+
+    // Update ground colors
+    if (config.environment?.ground) {
+        const ground = config.environment.ground;
+
+        if (floorMesh && ground.floorColor !== undefined) {
+            floorMesh.material.color.setHex(ground.floorColor);
+            console.log(`🏔️ Floor color set to ${ground.floorColor.toString(16)}`);
+        }
+        if (ringMesh && ground.ringColor !== undefined) {
+            ringMesh.material.color.setHex(ground.ringColor);
+            console.log(`⭕ Ring color set to ${ground.ringColor.toString(16)}`);
+        }
+        if (magicCircleMesh && ground.magicCircleColor !== undefined) {
+            magicCircleMesh.material.color.setHex(ground.magicCircleColor);
+            console.log(`✨ Magic circle color set to ${ground.magicCircleColor.toString(16)}`);
+        }
+    }
+
+    // Update sky colors if provided
+    if (config.environment?.sky && skyMesh) {
+        const sky = config.environment.sky;
+        console.log('🌌 Updating sky colors:', sky);
+
+        // Update shader uniforms (immediate effect)
+        if (sky.dayTopColor !== undefined) {
+            skyMesh.material.uniforms.topColor.value.setHex(sky.dayTopColor);
+        }
+        if (sky.dayBottomColor !== undefined) {
+            skyMesh.material.uniforms.bottomColor.value.setHex(sky.dayBottomColor);
+        }
+    }
+
+    // Update fog if provided
+    if (config.environment?.fog && scene?.fog) {
+        const fogConfig = config.environment.fog;
+        console.log('🌫️ Updating fog:', fogConfig);
+
+        if (fogConfig.color !== undefined) {
+            const fogColor = new THREE.Color(fogConfig.color);
+            scene.fog.color.copy(fogColor);
+            scene.background = fogColor;
+        }
+        if (fogConfig.density !== undefined) {
+            scene.fog.density = fogConfig.density;
+        }
+    }
+
+    // Update ambient lighting
+    if (config.environment?.lighting && ambientLight) {
+        const lighting = config.environment.lighting;
+        console.log('💡 Updating lighting:', lighting);
+
+        if (lighting.ambientColor !== undefined) {
+            ambientLight.color.setHex(lighting.ambientColor);
+        }
+        if (lighting.ambientIntensity !== undefined) {
+            ambientLight.intensity = lighting.ambientIntensity;
+        }
+        if (lighting.sunColor !== undefined && sunLight) {
+            sunLight.color.setHex(lighting.sunColor);
+        }
+        if (lighting.sunIntensity !== undefined && sunLight) {
+            sunLight.intensity = lighting.sunIntensity;
+        }
+    }
+
+    // Show visual feedback that config was applied
+    showConfigAppliedEffect(config.meta?.name || 'Custom World');
+}
+
+/**
+ * Show a visual effect when config is applied
+ */
+function showConfigAppliedEffect(configName) {
+    // Create a screen flash effect
+    const flash = document.createElement('div');
+    flash.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%);
+        pointer-events: none;
+        z-index: 9999;
+        animation: configFlash 0.5s ease-out forwards;
+    `;
+
+    // Add animation CSS
+    if (!document.getElementById('config-flash-style')) {
+        const style = document.createElement('style');
+        style.id = 'config-flash-style';
+        style.textContent = `
+            @keyframes configFlash {
+                from { opacity: 1; }
+                to { opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 500);
+
+    // Show notification
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+        color: white;
+        padding: 15px 30px;
+        border-radius: 10px;
+        font-family: 'Cinzel', serif;
+        font-size: 18px;
+        text-align: center;
+        z-index: 10000;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        animation: slideDown 0.3s ease-out;
+    `;
+    notification.innerHTML = `✨ ${configName} ✨<br><small>World transformed!</small>`;
+
+    // Add slide animation
+    if (!document.getElementById('config-notification-style')) {
+        const style = document.createElement('style');
+        style.id = 'config-notification-style';
+        style.textContent = `
+            @keyframes slideDown {
+                from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+                to { transform: translateX(-50%) translateY(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        notification.style.animation = 'slideDown 0.3s ease-out reverse';
+        setTimeout(() => notification.remove(), 300);
+    }, 2000);
 }

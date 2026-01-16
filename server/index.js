@@ -1,13 +1,20 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 
+// Import configuration modules
+const { DEFAULT_CONFIG, cloneConfig, mergeConfigs, validateConfig } = require('./gameConfig');
+const { generateGameConfig, saveConfig, loadConfig, listSavedGames } = require('./aiGenerator');
+const { chatWithMentor, getOpponentAction, getOpponentTaunt } = require('./aiChat');
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// --- CONSTANTS ---
+// --- CONSTANTS (LOCKED - Never modified by AI) ---
 const PORT = process.env.PORT || 3000;
 const TICK_RATE = 60;
 const SPELL_COOLDOWN = 800;
@@ -17,19 +24,12 @@ const GRAVITY = 25;
 const ARENA_SIZE = 50;
 const RESPAWN_TIME = 5000; // 5 seconds
 
-// --- CHARACTERS ---
-const CHARACTERS = {
-    'hary': { name: 'Hary Potter', color: 0xff0000, robeColor: 0x740001, house: 'gryffindor' },
-    'hermine': { name: 'Hermine Granger', color: 0xff6600, robeColor: 0x740001, house: 'gryffindor' },
-    'roon': { name: 'Roon Weasley', color: 0xff9900, robeColor: 0x740001, house: 'gryffindor' },
-    'darco': { name: 'Darco Malfoy', color: 0x00ff00, robeColor: 0x1a472a, house: 'slytherin' },
-    'volmort': { name: 'Lord volemort', color: 0x000000, robeColor: 0x111111, house: 'slytherin' },
-    'snape': { name: 'Severus Snape', color: 0x333333, robeColor: 0x000000, house: 'slytherin' },
-    'humbledore': { name: 'Albus Humbledore', color: 0x9999ff, robeColor: 0x4444aa, house: 'gryffindor' },
-    'cuna': { name: 'Cuna Lovegood', color: 0x0099ff, robeColor: 0x0e1a40, house: 'ravenclaw' },
-    'cedric': { name: 'Cedric Diggory', color: 0xffcc00, robeColor: 0xecb939, house: 'hufflepuff' },
-    'dellatrix': { name: 'Dellatrix Lestrange', color: 0x990099, robeColor: 0x1a472a, house: 'slytherin' }
-};
+// OpenRouter API key from environment
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet';
+
+// --- DEFAULT CHARACTERS (from config) ---
+const getCharacters = (config) => config?.characters || DEFAULT_CONFIG.characters;
 
 // ============================================================
 // COMPREHENSIVE SPELL DICTIONARY
@@ -145,10 +145,26 @@ const FUZZY_PATTERNS = {
     'morsmorde': ['morsmorde', 'mors', 'dark mark', 'morse', 'mordre', 'morsmord']
 };
 
-// Match spell with comprehensive fuzzy logic
-function matchSpell(transcript) {
+// Build fuzzy patterns from config
+function buildFuzzyPatterns(config) {
+    if (!config?.spells) return FUZZY_PATTERNS;
+
+    const patterns = {};
+    for (const [spellName, spellData] of Object.entries(config.spells)) {
+        if (spellData.voiceCommands && Array.isArray(spellData.voiceCommands)) {
+            patterns[spellName] = spellData.voiceCommands;
+        } else if (FUZZY_PATTERNS[spellName]) {
+            patterns[spellName] = FUZZY_PATTERNS[spellName];
+        }
+    }
+    return { ...FUZZY_PATTERNS, ...patterns };
+}
+
+// Match spell with comprehensive fuzzy logic (now config-aware)
+function matchSpell(transcript, config = null) {
     if (!transcript) return null;
 
+    const fuzzyPatterns = buildFuzzyPatterns(config);
     const clean = transcript.toLowerCase().replace(/[^a-z\s]/g, '').trim();
     const words = clean.split(/\s+/);
     const combined = clean.replace(/\s+/g, '');
@@ -161,16 +177,16 @@ function matchSpell(transcript) {
         if (SPELLS[word]) return SPELLS[word];
     }
 
-    // 3. Fuzzy pattern match
-    for (const [spellName, patterns] of Object.entries(FUZZY_PATTERNS)) {
+    // 3. Fuzzy pattern match (using config voice commands)
+    for (const [spellName, patterns] of Object.entries(fuzzyPatterns)) {
         for (const pattern of patterns) {
             // Check if pattern exists in original transcript
-            if (clean.includes(pattern)) {
+            if (clean.includes(pattern.toLowerCase())) {
                 return SPELLS[spellName];
             }
             // Check each word
             for (const word of words) {
-                if (word.includes(pattern) || pattern.includes(word)) {
+                if (word.includes(pattern.toLowerCase()) || pattern.toLowerCase().includes(word)) {
                     if (word.length >= 3) return SPELLS[spellName];
                 }
             }
@@ -184,9 +200,9 @@ function matchSpell(transcript) {
                 const dist = levenshtein(word, spellName);
                 if (dist <= 3) return SPELLS[spellName];
                 // Also check against patterns
-                const patterns = FUZZY_PATTERNS[spellName] || [];
+                const patterns = fuzzyPatterns[spellName] || [];
                 for (const p of patterns) {
-                    if (levenshtein(word, p) <= 2) return SPELLS[spellName];
+                    if (levenshtein(word, p.toLowerCase()) <= 2) return SPELLS[spellName];
                 }
             }
         }
@@ -219,10 +235,11 @@ function levenshtein(a, b) {
 }
 
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.json());
 
 // --- GAME STATE ---
 class GameRoom {
-    constructor(roomId, hostId, hostName, gameMode = 'endless', killTarget = 0, timeLimit = 0) {
+    constructor(roomId, hostId, hostName, gameMode = 'endless', killTarget = 0, timeLimit = 0, customConfig = null) {
         this.id = roomId;
         this.hostId = hostId;
         this.hostName = hostName;
@@ -232,6 +249,12 @@ class GameRoom {
         this.projectileIdCounter = 0;
         this.effectIdCounter = 0;
         this.createdAt = Date.now();
+
+        // Custom game config (merged with defaults)
+        this.config = customConfig ? mergeConfigs(DEFAULT_CONFIG, customConfig) : cloneConfig(DEFAULT_CONFIG);
+
+        // WebRTC peer tracking for proximity chat
+        this.peerConnections = new Map(); // Map<peerId, Set<connectedPeerIds>>
 
         // Game mode settings
         this.gameMode = gameMode;
@@ -243,7 +266,8 @@ class GameRoom {
     }
 
     addPlayer(socket, name, character) {
-        const charData = CHARACTERS[character] || CHARACTERS['hary'];
+        const characters = getCharacters(this.config);
+        const charData = characters[character] || characters['hary'] || Object.values(characters)[0];
         this.players[socket.id] = {
             id: socket.id,
             x: (Math.random() - 0.5) * 30,
@@ -511,7 +535,7 @@ class GameRoom {
         const now = Date.now();
         if (p.lastCastTime && now - p.lastCastTime < SPELL_COOLDOWN) return;
 
-        const spell = matchSpell(transcript);
+        const spell = matchSpell(transcript, this.config);
         if (!spell) {
             io.to(socketId).emit('cast_fail', { message: `Unknown: "${transcript}"` });
             return;
@@ -606,24 +630,56 @@ io.on('connection', (socket) => {
                 id: id,
                 host: room.hostName,
                 players: Object.keys(room.players).length,
-                maxPlayers: 8
+                maxPlayers: 8,
+                theme: room.config?.meta?.theme || 'wizard',
+                customName: room.config?.meta?.name || 'Wizard Duel Arena'
             });
         });
         socket.emit('room_list', roomList);
     });
 
-    // Host a game
-    socket.on('host_game', ({ name, character, roomName, gameMode, killTarget, timeLimit }) => {
+    // Generate AI config
+    socket.on('generate_config', async ({ prompt }) => {
+        if (!OPENROUTER_API_KEY) {
+            socket.emit('generate_error', { message: 'OpenRouter API key not configured on server' });
+            return;
+        }
+
+        try {
+            socket.emit('generate_status', { status: 'generating', message: 'AI is creating your world...' });
+
+            const config = await generateGameConfig(prompt, OPENROUTER_API_KEY, OPENROUTER_MODEL);
+
+            socket.emit('generate_success', { config });
+            console.log(`AI generated config for prompt: "${prompt.substring(0, 50)}..."`);
+        } catch (err) {
+            socket.emit('generate_error', { message: err.message });
+            console.error('AI generation failed:', err);
+        }
+    });
+
+    // Host a game with optional custom config
+    socket.on('host_game', async ({ name, character, roomName, gameMode, killTarget, timeLimit, customConfig }) => {
         const roomId = roomName || `room_${Date.now()}`;
         if (rooms.has(roomId)) {
             socket.emit('host_error', { message: 'Room already exists' });
             return;
         }
 
-        const room = new GameRoom(roomId, socket.id, name, gameMode || 'endless', killTarget || 0, timeLimit || 0);
+        const room = new GameRoom(roomId, socket.id, name, gameMode || 'endless', killTarget || 0, timeLimit || 0, customConfig);
         rooms.set(roomId, room);
         room.addPlayer(socket, name, character);
         currentRoomId = roomId;
+
+        // Save custom config if it exists
+        if (customConfig) {
+            try {
+                await saveConfig(roomId, room.config);
+                console.log(`Saved custom config for room ${roomId}`);
+            } catch (err) {
+                console.error('Failed to save config:', err);
+            }
+        }
 
         socket.emit('joined', {
             room: roomId,
@@ -631,10 +687,13 @@ io.on('connection', (socket) => {
             isHost: true,
             gameMode: room.gameMode,
             killTarget: room.killTarget,
-            timeLimit: room.timeLimit
+            timeLimit: room.timeLimit,
+            config: room.config // Send config to client
         });
-        socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
-        console.log(`${name} hosted ${roomId} [${gameMode}, kills:${killTarget}, time:${timeLimit}s]`);
+
+        const characters = getCharacters(room.config);
+        socket.emit('character_list', Object.entries(characters).map(([k, v]) => ({ id: k, ...v })));
+        console.log(`${name} hosted ${roomId} [${gameMode}, kills:${killTarget}, time:${timeLimit}s, custom:${!!customConfig}]`);
     });
 
     // Join a game
@@ -653,8 +712,24 @@ io.on('connection', (socket) => {
         room.addPlayer(socket, name, character);
         currentRoomId = roomId;
 
-        socket.emit('joined', { room: roomId, id: socket.id, isHost: false });
-        socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
+        // Send room's custom config to joining player
+        socket.emit('joined', {
+            room: roomId,
+            id: socket.id,
+            isHost: false,
+            config: room.config // They get the same config as the host
+        });
+
+        const characters = getCharacters(room.config);
+        socket.emit('character_list', Object.entries(characters).map(([k, v]) => ({ id: k, ...v })));
+
+        // Notify existing players about new peer for WebRTC
+        socket.to(roomId).emit('peer_joined', { peerId: socket.id, playerName: name });
+
+        // Send list of existing peers to the new player
+        const existingPeers = Object.keys(room.players).filter(id => id !== socket.id);
+        socket.emit('existing_peers', { peers: existingPeers });
+
         console.log(`${name} joined ${roomId}`);
     });
 
@@ -667,9 +742,40 @@ io.on('connection', (socket) => {
         if (!rooms.has(currentRoomId)) {
             rooms.set(currentRoomId, new GameRoom(currentRoomId, socket.id, name));
         }
-        rooms.get(currentRoomId).addPlayer(socket, name, 'hary');
-        socket.emit('joined', { room: currentRoomId, id: socket.id });
-        socket.emit('character_list', Object.entries(CHARACTERS).map(([k, v]) => ({ id: k, ...v })));
+        const currentRoom = rooms.get(currentRoomId);
+        currentRoom.addPlayer(socket, name, 'hary');
+        socket.emit('joined', { room: currentRoomId, id: socket.id, config: currentRoom.config });
+        const characters = getCharacters(currentRoom.config);
+        socket.emit('character_list', Object.entries(characters).map(([k, v]) => ({ id: k, ...v })));
+    });
+
+    // WebRTC Signaling for Proximity Chat
+    socket.on('webrtc_signal', ({ targetId, signal }) => {
+        io.to(targetId).emit('webrtc_signal', {
+            fromId: socket.id,
+            signal
+        });
+    });
+
+    socket.on('webrtc_offer', ({ targetId, offer }) => {
+        io.to(targetId).emit('webrtc_offer', {
+            fromId: socket.id,
+            offer
+        });
+    });
+
+    socket.on('webrtc_answer', ({ targetId, answer }) => {
+        io.to(targetId).emit('webrtc_answer', {
+            fromId: socket.id,
+            answer
+        });
+    });
+
+    socket.on('webrtc_ice_candidate', ({ targetId, candidate }) => {
+        io.to(targetId).emit('webrtc_ice_candidate', {
+            fromId: socket.id,
+            candidate
+        });
     });
 
     socket.on('request_respawn', () => {
@@ -681,6 +787,10 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (currentRoomId && rooms.has(currentRoomId)) {
             const room = rooms.get(currentRoomId);
+
+            // Notify other players about peer leaving (for WebRTC cleanup)
+            socket.to(currentRoomId).emit('peer_left', { peerId: socket.id });
+
             room.removePlayer(socket.id);
             if (Object.keys(room.players).length === 0) {
                 rooms.delete(currentRoomId);
@@ -699,12 +809,320 @@ io.on('connection', (socket) => {
             rooms.get(currentRoomId).handleCast(socket.id, data.transcript);
         }
     });
+
+    // ==================== RPG MODE HANDLERS ====================
+
+    // Store conversation history per socket
+    const mentorHistory = [];
+
+    // AI Mentor Chat
+    socket.on('mentor_chat', async ({ message }) => {
+        if (!OPENROUTER_API_KEY) {
+            socket.emit('mentor_reply', {
+                reply: "🔮 The mystical connection is unavailable... (API key not configured)",
+                error: true
+            });
+            return;
+        }
+
+        try {
+            socket.emit('mentor_typing', { typing: true });
+
+            const reply = await chatWithMentor(message, mentorHistory, OPENROUTER_API_KEY, OPENROUTER_MODEL);
+
+            // Store conversation history
+            mentorHistory.push({ role: 'user', content: message });
+            mentorHistory.push({ role: 'assistant', content: reply });
+
+            // Keep only last 20 messages
+            while (mentorHistory.length > 20) {
+                mentorHistory.shift();
+            }
+
+            socket.emit('mentor_reply', { reply, error: false });
+        } catch (err) {
+            socket.emit('mentor_reply', {
+                reply: "✨ The magical energies are turbulent... try again, young wizard.",
+                error: true
+            });
+        }
+    });
+
+    // Start AI Battle (Solo RPG Mode)
+    socket.on('start_ai_battle', async ({ name, character, difficulty }) => {
+        const roomId = `ai_battle_${socket.id}_${Date.now()}`;
+
+        const room = new GameRoom(roomId, socket.id, name, 'endless', 0, 0, null);
+        rooms.set(roomId, room);
+        room.addPlayer(socket, name, character);
+        room.isAiBattle = true;
+        room.aiDifficulty = difficulty || 'normal';
+
+        // Add AI opponent
+        const aiId = `ai_${Date.now()}`;
+        const characters = getCharacters(room.config);
+        const aiCharacter = Object.keys(characters)[Math.floor(Math.random() * Object.keys(characters).length)];
+        const aiCharData = characters[aiCharacter] || characters['volmort'] || Object.values(characters)[0];
+
+        room.aiPlayer = {
+            id: aiId,
+            x: (Math.random() - 0.5) * 30,
+            z: (Math.random() - 0.5) * 30,
+            y: 0,
+            vy: 0,
+            rot: 0,
+            state: 'IDLE',
+            health: 100,
+            maxHealth: 100,
+            name: 'Master Eldric',
+            character: aiCharacter,
+            characterData: aiCharData,
+            activeSpell: null,
+            isGrounded: true,
+            lumosActive: false,
+            statusEnd: 0,
+            kills: 0,
+            deaths: 0,
+            avadaUses: 0,
+            respawnTime: 0,
+            isAI: true,
+            lastActionTime: 0,
+            lastSpell: null
+        };
+        room.players[aiId] = room.aiPlayer;
+        room.aiFightStartTime = Date.now();
+
+        currentRoomId = roomId;
+
+        // Get opening taunt
+        const taunt = await getOpponentTaunt('gameStart', OPENROUTER_API_KEY, OPENROUTER_MODEL);
+
+        socket.emit('joined', {
+            room: roomId,
+            id: socket.id,
+            isHost: true,
+            isAiBattle: true,
+            aiDifficulty: difficulty,
+            config: room.config
+        });
+
+        socket.emit('ai_taunt', { message: taunt });
+        socket.emit('character_list', Object.entries(characters).map(([k, v]) => ({ id: k, ...v })));
+
+        console.log(`${name} started AI battle (${difficulty}) in ${roomId}`);
+
+        // Start AI decision loop for this battle
+        startAIBattleLoop(roomId, socket);
+    });
 });
+
+// List saved custom games endpoint
+app.get('/api/saved-games', async (req, res) => {
+    try {
+        const games = await listSavedGames();
+        res.json({ games });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==================== AI BATTLE LOOP ====================
+function startAIBattleLoop(roomId, playerSocket) {
+    const AI_DECISION_INTERVAL = 1500; // AI makes decision every 1.5s
+    const AI_MOVE_INTERVAL = 100; // AI moves every 100ms
+
+    let lastDecision = { spell: null, target: 'aim', reason: '' };
+    let moveAngle = Math.random() * Math.PI * 2;
+    let moveDuration = 0;
+
+    // AI Movement loop
+    const moveLoop = setInterval(() => {
+        const room = rooms.get(roomId);
+        if (!room || !room.aiPlayer || !room.isAiBattle) {
+            clearInterval(moveLoop);
+            return;
+        }
+
+        const ai = room.aiPlayer;
+        const playerIds = Object.keys(room.players).filter(id => !room.players[id].isAI);
+        if (playerIds.length === 0) {
+            clearInterval(moveLoop);
+            return;
+        }
+
+        const player = room.players[playerIds[0]];
+        if (!player || ai.state === 'DEAD') return;
+
+        // Calculate distance to player
+        const dx = player.x - ai.x;
+        const dz = player.z - ai.z;
+        const distance = Math.hypot(dx, dz);
+
+        // AI looks at player
+        ai.rot = Math.atan2(-dx, -dz);
+
+        // AI Movement based on decision
+        const speed = 8 * (1 / TICK_RATE);
+
+        if (!['STUNNED', 'FROZEN', 'DEAD'].includes(ai.state)) {
+            moveDuration--;
+
+            if (moveDuration <= 0) {
+                // Choose new movement pattern
+                moveDuration = 20 + Math.floor(Math.random() * 30);
+
+                if (lastDecision.target === 'advance' && distance > 8) {
+                    moveAngle = Math.atan2(dx, dz);
+                } else if (lastDecision.target === 'retreat' || distance < 5) {
+                    moveAngle = Math.atan2(-dx, -dz);
+                } else if (lastDecision.target === 'evade') {
+                    moveAngle = ai.rot + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
+                } else {
+                    // Circle strafe
+                    moveAngle = ai.rot + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+                }
+            }
+
+            // Apply movement
+            const newX = ai.x + Math.sin(moveAngle) * speed;
+            const newZ = ai.z + Math.cos(moveAngle) * speed;
+
+            // Keep in arena
+            const dist = Math.hypot(newX, newZ);
+            if (dist < ARENA_SIZE) {
+                ai.x = newX;
+                ai.z = newZ;
+            } else {
+                moveAngle += Math.PI; // Turn around
+            }
+        }
+
+        // Gravity for AI
+        if (!ai.isGrounded) {
+            ai.vy -= GRAVITY * (1 / TICK_RATE);
+            ai.y += ai.vy * (1 / TICK_RATE);
+            if (ai.y <= 0) {
+                ai.y = 0;
+                ai.vy = 0;
+                ai.isGrounded = true;
+            }
+        }
+    }, AI_MOVE_INTERVAL);
+
+    // AI Decision loop
+    const decisionLoop = setInterval(async () => {
+        const room = rooms.get(roomId);
+        if (!room || !room.aiPlayer || !room.isAiBattle) {
+            clearInterval(decisionLoop);
+            clearInterval(moveLoop);
+            return;
+        }
+
+        const ai = room.aiPlayer;
+        const playerIds = Object.keys(room.players).filter(id => !room.players[id].isAI);
+        if (playerIds.length === 0) {
+            clearInterval(decisionLoop);
+            clearInterval(moveLoop);
+            return;
+        }
+
+        const player = room.players[playerIds[0]];
+        if (!player) return;
+
+        // Skip if AI is incapacitated
+        if (['STUNNED', 'FROZEN', 'DEAD', 'DISARMED'].includes(ai.state)) {
+            return;
+        }
+
+        const distance = Math.hypot(player.x - ai.x, player.z - ai.z);
+        const fightTime = Math.floor((Date.now() - room.aiFightStartTime) / 1000);
+
+        // Get AI decision
+        const gameState = {
+            aiHealth: ai.health,
+            aiStatus: ai.state,
+            playerHealth: player.health,
+            playerStatus: player.state,
+            distance: distance,
+            playerCasting: player.activeSpell !== null,
+            lastAiSpell: ai.lastSpell,
+            fightTime: fightTime
+        };
+
+        try {
+            const decision = await getOpponentAction(gameState, OPENROUTER_API_KEY, OPENROUTER_MODEL, room.aiDifficulty);
+            lastDecision = decision;
+
+            if (decision.spell && SPELLS[decision.spell]) {
+                // Cast the spell
+                const now = Date.now();
+                if (!ai.lastCastTime || now - ai.lastCastTime > SPELL_COOLDOWN) {
+                    ai.lastCastTime = now;
+                    ai.lastSpell = decision.spell;
+
+                    const spell = SPELLS[decision.spell];
+
+                    if (spell.isShield) {
+                        ai.activeSpell = spell.type;
+                        setTimeout(() => {
+                            if (room.players[ai.id]) room.players[ai.id].activeSpell = null;
+                        }, 4000);
+                    } else if (spell.isUtility) {
+                        // Handle utility spells
+                        if (spell.effect === 'heal') {
+                            ai.health = Math.min(ai.maxHealth, ai.health + 30);
+                        } else if (spell.effect === 'rise') {
+                            ai.vy = 15;
+                            ai.isGrounded = false;
+                        }
+                    } else if (spell.speed) {
+                        // Fire projectile at player
+                        const aimX = player.x - ai.x;
+                        const aimZ = player.z - ai.z;
+                        const aimDist = Math.hypot(aimX, aimZ);
+
+                        room.projectiles.push({
+                            id: room.projectileIdCounter++,
+                            ownerId: ai.id,
+                            type: spell.type,
+                            x: ai.x - (aimX / aimDist) * 1.5,
+                            z: ai.z - (aimZ / aimDist) * 1.5,
+                            vx: -(aimX / aimDist) * spell.speed,
+                            vz: -(aimZ / aimDist) * spell.speed,
+                            lifetime: 5.0
+                        });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('AI decision error:', err);
+        }
+
+        // Check for game over conditions
+        if (player.state === 'DEAD' && player.health <= 0) {
+            const taunt = await getOpponentTaunt('victory', OPENROUTER_API_KEY, OPENROUTER_MODEL);
+            playerSocket.emit('ai_taunt', { message: taunt });
+            playerSocket.emit('ai_battle_result', { winner: 'ai', aiName: ai.name });
+        } else if (ai.state === 'DEAD' && ai.health <= 0) {
+            const taunt = await getOpponentTaunt('defeat', OPENROUTER_API_KEY, OPENROUTER_MODEL);
+            playerSocket.emit('ai_taunt', { message: taunt });
+            playerSocket.emit('ai_battle_result', { winner: 'player', aiName: ai.name });
+        }
+
+    }, AI_DECISION_INTERVAL);
+
+    // Cleanup when player disconnects
+    playerSocket.on('disconnect', () => {
+        clearInterval(decisionLoop);
+        clearInterval(moveLoop);
+    });
+}
 
 server.listen(PORT, () => {
     console.log(`✨ Wizard Duel Arena running on http://localhost:${PORT}`);
-    console.log(`🧙 ${Object.keys(CHARACTERS).length} characters available`);
+    console.log(`🧙 ${Object.keys(DEFAULT_CONFIG.characters).length} characters available`);
     console.log(`📚 ${Object.keys(SPELLS).length} spells loaded`);
+    console.log(`🤖 OpenRouter API: ${OPENROUTER_API_KEY ? 'Configured' : 'Not configured'}`);
 
     // Keep-alive ping to prevent Render from spinning down
     const RENDER_URL = 'https://wizard-duel-1.onrender.com/';

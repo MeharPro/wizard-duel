@@ -75,6 +75,7 @@
             <div class="lobby-tabs">
                 <button class="tab-btn active" data-tab="join">Join Game</button>
                 <button class="tab-btn" data-tab="host">Host Game</button>
+                <button class="tab-btn rpg-tab" data-tab="rpg">⚔️ RPG Mode</button>
             </div>
 
             <!-- Join Panel -->
@@ -92,6 +93,15 @@
             <!-- Host Panel -->
             <div class="tab-panel" id="host-panel">
                 <input type="text" id="room-name-input" placeholder="Room name (optional)">
+
+                <!-- AI Customization Section -->
+                <div class="ai-customization-section">
+                    <label>🤖 AI Game Customization:</label>
+                    <textarea id="ai-prompt-input"
+                        placeholder="Describe your custom game... (e.g., 'Trash talk battle where insults are weapons' or 'Space duel with laser beams')"></textarea>
+                    <button id="generate-config-btn" class="ai-btn">✨ Generate Custom World</button>
+                    <div id="ai-status" class="ai-status" style="display: none;"></div>
+                </div>
 
                 <!-- Game Mode Options -->
                 <div class="game-mode-section">
@@ -125,7 +135,59 @@
                     </div>
                 </div>
 
+                <!-- Proximity Chat Toggle -->
+                <div class="proximity-chat-section">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="proximity-chat-toggle">
+                        <span class="toggle-slider"></span>
+                        🎤 Proximity Voice Chat
+                    </label>
+                    <small>Talk to nearby players (volume based on distance)</small>
+                </div>
+
                 <button id="host-btn">✨ Create Arena</button>
+            </div>
+
+            <!-- RPG Mode Panel -->
+            <div class="tab-panel" id="rpg-panel">
+                <div class="rpg-intro">
+                    <h3>🧙 Welcome to RPG Mode</h3>
+                    <p>Train with the AI mentor or battle against an AI wizard!</p>
+                </div>
+
+                <!-- AI Mentor Chat -->
+                <div class="mentor-section">
+                    <h4>📚 Ask the Mentor</h4>
+                    <p class="mentor-desc">Chat with Master Eldric for hints about spells and combat strategies!</p>
+                    <div class="mentor-chat" id="mentor-chat">
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="chat-message mentor">
+                                <span class="sender">🧙 Master Eldric:</span>
+                                <span class="text">Greetings, young wizard! Ask me anything about spells, combat
+                                    strategies, or how to defeat your enemies.</span>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="mentor-input" placeholder="Ask about spells, combos, strategies...">
+                            <button id="mentor-send-btn">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Battle Section -->
+                <div class="ai-battle-section">
+                    <h4>⚔️ Battle AI Wizard</h4>
+                    <p class="battle-desc">Test your skills against an AI-controlled wizard opponent!</p>
+                    <div class="difficulty-select">
+                        <label>Difficulty:</label>
+                        <select id="ai-difficulty">
+                            <option value="easy">🟢 Easy - Forgiving opponent</option>
+                            <option value="normal" selected>🟡 Normal - Balanced challenge</option>
+                            <option value="hard">🔴 Hard - Merciless master</option>
+                        </select>
+                    </div>
+                    <button id="start-ai-battle-btn" class="battle-btn">⚔️ Start AI Battle</button>
+                </div>
             </div>
 
             <p class="instruction">
@@ -172,6 +234,17 @@
         <div id="scoreboard" style="display: none;">
             <h3>Scoreboard</h3>
             <div id="scores"></div>
+        </div>
+
+        <!-- Voice Chat Indicator -->
+        <div id="voice-chat-indicator" style="display: none;"></div>
+
+        <!-- AI Battle Taunt Display -->
+        <div id="ai-taunt-display" style="display: none;">
+            <div class="taunt-content">
+                <span class="taunt-name">🧙 Master Eldric:</span>
+                <span class="taunt-message" id="ai-taunt-message"></span>
+            </div>
         </div>
     </div>
 
